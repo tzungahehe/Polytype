@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PolyglotType - Luyện Gõ Phím Đa Ngôn Ngữ</title>
+  <title>Luyện Gõ Phím Đa Ngôn Ngữ</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com">
@@ -22,7 +22,7 @@
     }
   </script>
   <style>
-    /* Bàn phím tham khảo (Display-only), không bắt click chuột */
+    /* Bàn phím tham khảo (View-only), không bắt click chuột */
     .keyboard-key {
       pointer-events: none;
       transition: background-color 0.08s ease, transform 0.08s ease, box-shadow 0.08s ease;
@@ -167,28 +167,10 @@
   </footer>
 
   <script>
-    // --- Dữ liệu dự phòng khẩn cấp ---
-    const FALLBACK_WORDS = {
-      en: [
-        { word: "keyboard", ipa: "/ˈkiː.bɔːd/", meaning: "bàn phím", type: "n." },
-        { word: "practice", ipa: "/ˈpræk.tɪs/", meaning: "luyện tập", type: "v./n." },
-        { word: "language", ipa: "/ˈlæŋ.ɡwɪdʒ/", meaning: "ngôn ngữ", type: "n." },
-        { word: "velocity", ipa: "/vəˈlɒs.ə.ti/", meaning: "tốc độ", type: "n." },
-        { word: "accuracy", ipa: "/ˈæk.jə.rə.si/", meaning: "độ chính xác", type: "n." }
-      ],
-      de: [
-        { word: "tastatur", ipa: "/tastaˈtuːɐ̯/", meaning: "bàn phím", type: "f." },
-        { word: "übung", ipa: "/ˈyːbʊŋ/", meaning: "bài luyện tập", type: "f." },
-        { word: "sprache", ipa: "/ˈʃpʁaːxə/", meaning: "ngôn ngữ", type: "f." },
-        { word: "geschwindigkeit", ipa: "/ɡəˈʃvɪndɪçkaɪt/", meaning: "tốc độ", type: "f." },
-        { word: "fleißig", ipa: "/ˈflaɪ̯sɪç/", meaning: "chăm chỉ", type: "adj." }
-      ]
-    };
-
-    // --- Các biến trạng thái & Cache dữ liệu CSV ---
-    let languagesList = [];
-    let loadedVocabCache = {};
-    let currentWords = [];
+    // --- Các biến trạng thái & Cache từ điển ---
+    let languagesList = [];             // Danh sách cấu hình từ languages.json
+    let loadedVocabCache = {};          // Cache lưu từ điển đã tải theo langId: { "en": [...], "de": [...] }
+    let currentWords = [];              // Danh sách từ vựng của ngôn ngữ đang chọn
     let currentLayout = 'qwerty';
     let currentWordIndex = 0;
     let userInput = '';
@@ -242,10 +224,9 @@
         ['Space']
       ],
       qwertz: [
-        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'ß'],
         ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', 'ü'],
         ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'ö', 'ä'],
-        ['y', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.'],
+        ['y', 'x', 'c', 'v', 'b', 'n', 'm', 'ß'],
         ['Space']
       ],
       azerty: [
@@ -447,7 +428,7 @@
         return;
       }
 
-      // Nhận mọi ký tự độ dài 1
+      // Chỉ nhận ký tự gõ hiển thị (độ dài 1), loại bỏ phím chức năng (Shift, Ctrl, Alt, v.v.)
       if (e.key.length !== 1) {
         return;
       }
@@ -478,82 +459,22 @@
       }
     });
 
-    // --- Hàm giải mã chuỗi CSV sang Array of Objects ---
-    function parseCSV(text) {
-      if (!text || typeof text !== 'string') return [];
-      const lines = text.trim().split(/\r?\n/);
-      if (lines.length <= 1) return [];
-
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
-      const words = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        // Tách các cột phân cách bởi dấu phẩy, hỗ trợ cụm trong ngoặc kép
-        const regex = /(?:\"([^\"]*(?:\"\"[^\"]*)*)\"|([^,]+)|(?=,))/g;
-        const values = [];
-        let match;
-        while ((match = regex.exec(line)) !== null) {
-          if (match[1] !== undefined) {
-            values.push(match[1].replace(/\"\"/g, '\"').trim());
-          } else if (match[2] !== undefined) {
-            values.push(match[2].trim());
-          } else {
-            values.push('');
-          }
-        }
-
-        const row = {};
-        headers.forEach((h, idx) => {
-          row[h] = values[idx] || '';
-        });
-
-        if (row.word) {
-          words.push(row);
-        }
-      }
-      return words;
-    }
-
-    // --- Tải file CSV với cơ chế tự động thử nhiều đường dẫn (Auto-Resolve Paths) ---
-    async function fetchCSVWithFallback(filePath, langId) {
-      const cleanPath = filePath.replace(/^\.?\//, '');
-      const candidates = [
-        filePath,
-        `./${cleanPath}`,
-        cleanPath,
-        `./data/${langId}.csv`,
-        `data/${langId}.csv`,
-        `./${langId}.csv`,
-        `${langId}.csv`
-      ];
-
-      const uniqueCandidates = [...new Set(candidates)];
-
-      for (const url of uniqueCandidates) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            const text = await res.text();
-            const parsed = parseCSV(text);
-            if (parsed.length > 0) return parsed;
-          }
-        } catch (e) {}
-      }
-
-      console.warn(`Không tìm thấy file CSV tại các đường dẫn thử nghiệm. Dùng fallback cho [${langId}]`);
-      return FALLBACK_WORDS[langId] || [];
-    }
-
-    // --- Chuyển đổi ngôn ngữ ---
+    // --- Tải từ điển riêng lẻ theo yêu cầu (Lazy Loading + Caching) ---
     async function switchLanguage(langId) {
       const langConfig = languagesList.find(l => l.id === langId);
       if (!langConfig) return;
 
-      if (!loadedVocabCache[langId] || loadedVocabCache[langId].length === 0) {
-        loadedVocabCache[langId] = await fetchCSVWithFallback(langConfig.file, langId);
+      // Nếu từ điển chưa nạp vào cache, tiến hành fetch file json riêng của tiếng đó
+      if (!loadedVocabCache[langId]) {
+        try {
+          const res = await fetch(langConfig.file);
+          if (!res.ok) throw new Error(`Không thể nạp file ${langConfig.file}`);
+          loadedVocabCache[langId] = await res.json();
+        } catch (err) {
+          console.error(`Lỗi nạp từ điển [${langId}]:`, err);
+          alert(`Không tìm thấy file từ điển ${langConfig.file}!`);
+          return;
+        }
       }
 
       currentWords = loadedVocabCache[langId] || [];
@@ -569,32 +490,68 @@
     }
 
     langSelect.addEventListener('change', (e) => {
-      switchLanguage(e.target.value);
-      langSelect.blur();
-    });
+      // Hàm phân tích cú pháp chuỗi CSV thành mảng object
+    function parseCSV(text) {
+      const lines = text.trim().split('\n');
+      if (lines.length <= 1) return [];
 
-    // --- Khởi tạo: Đọc languages.json ---
-    async function init() {
-      let loaded = false;
-      const jsonCandidates = ['./languages.json', 'languages.json'];
+      const headers = lines[0].split(',').map(h => h.trim());
+      const words = [];
 
-      for (const url of jsonCandidates) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            const data = await res.json();
-            languagesList = data.languages || [];
-            loaded = true;
-            break;
+      // Đọc từng dòng từ vựng
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Regex tách dấu phẩy thông minh (bỏ qua dấu phẩy nằm trong ngoặc kép)
+        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
+        const row = {};
+
+        headers.forEach((header, index) => {
+          let val = values[index] ? values[index].trim() : '';
+          // Bỏ dấu ngoặc kép bọc ngoài nếu có
+          if (val.startsWith('"') && val.endsWith('"')) {
+            val = val.slice(1, -1);
           }
-        } catch (e) {}
+          row[header] = val;
+        });
+
+        if (row.word) {
+          words.push(row);
+        }
+      }
+      return words;
+    }
+
+    // Tải và chuyển đổi file CSV của ngôn ngữ được chọn
+    async function switchLanguage(langId) {
+      const langConfig = languagesList.find(l => l.id === langId);
+      if (!langConfig) return;
+
+      if (!loadedVocabCache[langId]) {
+        try {
+          const res = await fetch(langConfig.file);
+          if (!res.ok) throw new Error(`Không thể nạp ${langConfig.file}`);
+          const csvText = await res.text();
+          loadedVocabCache[langId] = parseCSV(csvText); // Parse CSV thành mảng dữ liệu
+        } catch (err) {
+          console.error(`Lỗi nạp file CSV [${langId}]:`, err);
+          alert(`Không tìm thấy file ${langConfig.file}!`);
+          return;
+        }
       }
 
-      if (!loaded || languagesList.length === 0) {
-        languagesList = [
-          { id: "en", name: "English", keyboardType: "qwerty", file: "./data/en.csv" },
-          { id: "de", name: "Deutsch", keyboardType: "qwertz", file: "./data/de.csv" }
-        ];
+      currentWords = loadedVocabCache[langId] || [];
+      currentLayout = langConfig.keyboardType || 'qwerty';
+      currentWordIndex = 0;
+      userInput = '';
+      totalTyped = 0;
+      correctTyped = 0;
+      startTime = null;
+
+      renderVirtualKeyboard(currentLayout);
+      displayCurrentWord();
+    }
       }
 
       langSelect.innerHTML = '';
