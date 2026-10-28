@@ -83,7 +83,7 @@
           <span id="soundText">Sound ON</span>
         </button>
 
-        <!-- Dropdown ngôn ngữ (Nạp từ languages.json) -->
+        <!-- Dropdown ngôn ngữ -->
         <div class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 shadow-inner">
           <span class="text-xs text-slate-400">Ngôn ngữ:</span>
           <select id="langSelect" class="bg-transparent text-sm font-semibold text-cyan-400 focus:outline-none cursor-pointer">
@@ -167,10 +167,28 @@
   </footer>
 
   <script>
+    // --- Dữ liệu dự phòng khẩn cấp ---
+    const FALLBACK_WORDS = {
+      en: [
+        { word: "keyboard", ipa: "/ˈkiː.bɔːd/", meaning: "bàn phím", type: "n." },
+        { word: "practice", ipa: "/ˈpræk.tɪs/", meaning: "luyện tập", type: "v./n." },
+        { word: "language", ipa: "/ˈlæŋ.ɡwɪdʒ/", meaning: "ngôn ngữ", type: "n." },
+        { word: "velocity", ipa: "/vəˈlɒs.ə.ti/", meaning: "tốc độ", type: "n." },
+        { word: "accuracy", ipa: "/ˈæk.jə.rə.si/", meaning: "độ chính xác", type: "n." }
+      ],
+      de: [
+        { word: "tastatur", ipa: "/tastaˈtuːɐ̯/", meaning: "bàn phím", type: "f." },
+        { word: "übung", ipa: "/ˈyːbʊŋ/", meaning: "bài luyện tập", type: "f." },
+        { word: "sprache", ipa: "/ˈʃpʁaːxə/", meaning: "ngôn ngữ", type: "f." },
+        { word: "geschwindigkeit", ipa: "/ɡəˈʃvɪndɪçkaɪt/", meaning: "tốc độ", type: "f." },
+        { word: "fleißig", ipa: "/ˈflaɪ̯sɪç/", meaning: "chăm chỉ", type: "adj." }
+      ]
+    };
+
     // --- Các biến trạng thái & Cache dữ liệu CSV ---
-    let languagesList = [];             // Danh sách cấu hình từ languages.json
-    let loadedVocabCache = {};          // Cache lưu từ vựng đã tải theo langId: { "en": [...], "de": [...] }
-    let currentWords = [];              // Danh sách từ vựng của ngôn ngữ đang chọn
+    let languagesList = [];
+    let loadedVocabCache = {};
+    let currentWords = [];
     let currentLayout = 'qwerty';
     let currentWordIndex = 0;
     let userInput = '';
@@ -215,7 +233,7 @@
       } catch (e) {}
     }
 
-    // --- Định nghĩa layout mẫu bàn phím (Đã chuẩn hóa tiếng Đức theo layout DIN 2137-1) ---
+    // --- Định nghĩa layout mẫu bàn phím ---
     const KEYBOARD_LAYOUTS = {
       qwerty: [
         ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
@@ -429,7 +447,7 @@
         return;
       }
 
-      // Chỉ nhận ký tự gõ hiển thị (độ dài 1 ký tự, hỗ trợ đầy đủ ký tự unicode/quốc tế)
+      // Nhận mọi ký tự độ dài 1
       if (e.key.length !== 1) {
         return;
       }
@@ -462,10 +480,11 @@
 
     // --- Hàm giải mã chuỗi CSV sang Array of Objects ---
     function parseCSV(text) {
+      if (!text || typeof text !== 'string') return [];
       const lines = text.trim().split(/\r?\n/);
       if (lines.length <= 1) return [];
 
-      const headers = lines[0].split(',').map(h => h.trim());
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
       const words = [];
 
       for (let i = 1; i < lines.length; i++) {
@@ -498,22 +517,43 @@
       return words;
     }
 
-    // --- Tải file CSV riêng của ngôn ngữ (Lazy load + Cache) ---
+    // --- Tải file CSV với cơ chế tự động thử nhiều đường dẫn (Auto-Resolve Paths) ---
+    async function fetchCSVWithFallback(filePath, langId) {
+      const cleanPath = filePath.replace(/^\.?\//, '');
+      const candidates = [
+        filePath,
+        `./${cleanPath}`,
+        cleanPath,
+        `./data/${langId}.csv`,
+        `data/${langId}.csv`,
+        `./${langId}.csv`,
+        `${langId}.csv`
+      ];
+
+      const uniqueCandidates = [...new Set(candidates)];
+
+      for (const url of uniqueCandidates) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const text = await res.text();
+            const parsed = parseCSV(text);
+            if (parsed.length > 0) return parsed;
+          }
+        } catch (e) {}
+      }
+
+      console.warn(`Không tìm thấy file CSV tại các đường dẫn thử nghiệm. Dùng fallback cho [${langId}]`);
+      return FALLBACK_WORDS[langId] || [];
+    }
+
+    // --- Chuyển đổi ngôn ngữ ---
     async function switchLanguage(langId) {
       const langConfig = languagesList.find(l => l.id === langId);
       if (!langConfig) return;
 
-      if (!loadedVocabCache[langId]) {
-        try {
-          const res = await fetch(langConfig.file);
-          if (!res.ok) throw new Error(`Không thể nạp file ${langConfig.file}`);
-          const text = await res.text();
-          loadedVocabCache[langId] = parseCSV(text);
-        } catch (err) {
-          console.error(`Lỗi nạp từ điển [${langId}]:`, err);
-          alert(`Không tìm thấy file ${langConfig.file}! Hãy kiểm tra đường dẫn.`);
-          return;
-        }
+      if (!loadedVocabCache[langId] || loadedVocabCache[langId].length === 0) {
+        loadedVocabCache[langId] = await fetchCSVWithFallback(langConfig.file, langId);
       }
 
       currentWords = loadedVocabCache[langId] || [];
@@ -533,16 +573,28 @@
       langSelect.blur();
     });
 
-    // --- Khởi tạo: Đọc languages.json và render dropdown ---
+    // --- Khởi tạo: Đọc languages.json ---
     async function init() {
-      try {
-        const res = await fetch('languages.json');
-        if (!res.ok) throw new Error('Không thể tải languages.json');
-        const data = await res.json();
-        languagesList = data.languages || [];
-      } catch (err) {
-        console.error('Lỗi khi nạp danh sách ngôn ngữ:', err);
-        return;
+      let loaded = false;
+      const jsonCandidates = ['./languages.json', 'languages.json'];
+
+      for (const url of jsonCandidates) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            languagesList = data.languages || [];
+            loaded = true;
+            break;
+          }
+        } catch (e) {}
+      }
+
+      if (!loaded || languagesList.length === 0) {
+        languagesList = [
+          { id: "en", name: "English", keyboardType: "qwerty", file: "./data/en.csv" },
+          { id: "de", name: "Deutsch", keyboardType: "qwertz", file: "./data/de.csv" }
+        ];
       }
 
       langSelect.innerHTML = '';
@@ -554,12 +606,4 @@
         langSelect.appendChild(opt);
       });
 
-      if (languagesList.length > 0) {
-        switchLanguage(languagesList[0].id);
-      }
-    }
-
-    init();
-  </script>
-</body>
-</html>
+      if
