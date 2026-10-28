@@ -22,7 +22,7 @@
     }
   </script>
   <style>
-    /* Bàn phím tham khảo (View-only), không bắt click chuột */
+    /* Bàn phím tham khảo (Display-only), không bắt click chuột */
     .keyboard-key {
       pointer-events: none;
       transition: background-color 0.08s ease, transform 0.08s ease, box-shadow 0.08s ease;
@@ -167,10 +167,10 @@
   </footer>
 
   <script>
-    // --- Các biến trạng thái & Cache từ điển ---
-    let languagesList = [];             // Danh sách cấu hình từ languages.json
-    let loadedVocabCache = {};          // Cache lưu từ điển đã tải theo langId: { "en": [...], "de": [...] }
-    let currentWords = [];              // Danh sách từ vựng của ngôn ngữ đang chọn
+    // --- Biến trạng thái & Cache ---
+    let languagesList = [];
+    let loadedVocabCache = {};
+    let currentWords = [];
     let currentLayout = 'qwerty';
     let currentWordIndex = 0;
     let userInput = '';
@@ -179,7 +179,7 @@
     let startTime = null;
     let soundEnabled = true;
 
-    // --- Giả lập âm thanh Switch cơ bằng Web Audio API ---
+    // --- Web Audio API Mechanical Sound ---
     let audioCtx = null;
     function playKeySound(isError = false) {
       if (!soundEnabled) return;
@@ -215,7 +215,7 @@
       } catch (e) {}
     }
 
-    // --- Định nghĩa layout mẫu bàn phím ---
+    // --- Định nghĩa layout chuẩn (Đức chuẩn hóa DIN 2137-1) ---
     const KEYBOARD_LAYOUTS = {
       qwerty: [
         ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
@@ -224,9 +224,10 @@
         ['Space']
       ],
       qwertz: [
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'ß'],
         ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', 'ü'],
         ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'ö', 'ä'],
-        ['y', 'x', 'c', 'v', 'b', 'n', 'm', 'ß'],
+        ['y', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.'],
         ['Space']
       ],
       azerty: [
@@ -322,7 +323,7 @@
       }
     }
 
-    // --- Sáng đèn khi người dùng ấn phím vật lý trên máy tính ---
+    // --- Sáng đèn khi người dùng ấn phím vật lý ---
     function highlightPhysicalKeyPress(key) {
       const el = document.querySelector(`.keyboard-key[data-key="${key.toLowerCase()}"]`);
       if (el) {
@@ -342,7 +343,6 @@
       }
       const acc = totalTyped === 0 ? 100 : Math.round((correctTyped / totalTyped) * 100);
       accuracyDisplay.textContent = acc + '%';
-
       countDisplay.textContent = `${currentWordIndex + 1}/${currentWords.length}`;
     }
 
@@ -402,7 +402,6 @@
     window.addEventListener('keydown', (e) => {
       if (document.activeElement === langSelect) return;
 
-      // Phím Tab hoặc Space để chuyển từ
       if (e.key === 'Tab') {
         e.preventDefault();
         playKeySound(false);
@@ -418,7 +417,6 @@
         return;
       }
 
-      // Phím Backspace để xóa ký tự
       if (e.key === 'Backspace') {
         if (userInput.length > 0) {
           userInput = userInput.slice(0, -1);
@@ -428,10 +426,7 @@
         return;
       }
 
-      // Chỉ nhận ký tự gõ hiển thị (độ dài 1), loại bỏ phím chức năng (Shift, Ctrl, Alt, v.v.)
-      if (e.key.length !== 1) {
-        return;
-      }
+      if (e.key.length !== 1) return;
 
       const inputChar = e.key;
       highlightPhysicalKeyPress(inputChar);
@@ -459,21 +454,45 @@
       }
     });
 
-    // --- Tải từ điển riêng lẻ theo yêu cầu (Lazy Loading + Caching) ---
+    // --- Phân tích cú pháp CSV tốc độ cao (Không dùng regex nặng) ---
+    function parseCSV(text) {
+      if (!text) return [];
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length <= 1) return [];
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+      const words = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const values = line.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+        if (values.length >= 3) {
+          words.push({
+            word: values[0] || '',
+            ipa: values[1] || '',
+            meaning: values[2] || '',
+            type: values[3] || 'từ vựng'
+          });
+        }
+      }
+      return words;
+    }
+
+    // --- Tải file CSV từ server ---
     async function switchLanguage(langId) {
       const langConfig = languagesList.find(l => l.id === langId);
       if (!langConfig) return;
 
-      // Nếu từ điển chưa nạp vào cache, tiến hành fetch file json riêng của tiếng đó
-      if (!loadedVocabCache[langId]) {
+      if (!loadedVocabCache[langId] || loadedVocabCache[langId].length === 0) {
         try {
-          const res = await fetch(langConfig.file);
-          if (!res.ok) throw new Error(`Không thể nạp file ${langConfig.file}`);
-          loadedVocabCache[langId] = await res.json();
+          const res = await fetch(langConfig.file, { cache: 'no-cache' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const text = await res.text();
+          loadedVocabCache[langId] = parseCSV(text);
         } catch (err) {
-          console.error(`Lỗi nạp từ điển [${langId}]:`, err);
-          alert(`Không tìm thấy file từ điển ${langConfig.file}!`);
-          return;
+          console.error(`Lỗi nạp file CSV [${langId}]:`, err);
         }
       }
 
@@ -490,68 +509,19 @@
     }
 
     langSelect.addEventListener('change', (e) => {
-      // Hàm phân tích cú pháp chuỗi CSV thành mảng object
-    function parseCSV(text) {
-      const lines = text.trim().split('\n');
-      if (lines.length <= 1) return [];
+      switchLanguage(e.target.value);
+      langSelect.blur();
+    });
 
-      const headers = lines[0].split(',').map(h => h.trim());
-      const words = [];
-
-      // Đọc từng dòng từ vựng
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        // Regex tách dấu phẩy thông minh (bỏ qua dấu phẩy nằm trong ngoặc kép)
-        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-        const row = {};
-
-        headers.forEach((header, index) => {
-          let val = values[index] ? values[index].trim() : '';
-          // Bỏ dấu ngoặc kép bọc ngoài nếu có
-          if (val.startsWith('"') && val.endsWith('"')) {
-            val = val.slice(1, -1);
-          }
-          row[header] = val;
-        });
-
-        if (row.word) {
-          words.push(row);
-        }
-      }
-      return words;
-    }
-
-    // Tải và chuyển đổi file CSV của ngôn ngữ được chọn
-    async function switchLanguage(langId) {
-      const langConfig = languagesList.find(l => l.id === langId);
-      if (!langConfig) return;
-
-      if (!loadedVocabCache[langId]) {
-        try {
-          const res = await fetch(langConfig.file);
-          if (!res.ok) throw new Error(`Không thể nạp ${langConfig.file}`);
-          const csvText = await res.text();
-          loadedVocabCache[langId] = parseCSV(csvText); // Parse CSV thành mảng dữ liệu
-        } catch (err) {
-          console.error(`Lỗi nạp file CSV [${langId}]:`, err);
-          alert(`Không tìm thấy file ${langConfig.file}!`);
-          return;
-        }
-      }
-
-      currentWords = loadedVocabCache[langId] || [];
-      currentLayout = langConfig.keyboardType || 'qwerty';
-      currentWordIndex = 0;
-      userInput = '';
-      totalTyped = 0;
-      correctTyped = 0;
-      startTime = null;
-
-      renderVirtualKeyboard(currentLayout);
-      displayCurrentWord();
-    }
+    // --- Khởi tạo: Đọc languages.json ---
+    async function init() {
+      try {
+        const res = await fetch('./languages.json', { cache: 'no-cache' });
+        if (!res.ok) throw new Error('Không thể tải languages.json');
+        const data = await res.json();
+        languagesList = data.languages || [];
+      } catch (err) {
+        console.error('Lỗi khi nạp danh sách ngôn ngữ:', err);
       }
 
       langSelect.innerHTML = '';
