@@ -1,62 +1,213 @@
-// Hàm phân tích cú pháp chuỗi CSV thành mảng object
-    function parseCSV(text) {
-      const lines = text.trim().split('\n');
-      if (lines.length <= 1) return [];
-
-      const headers = lines[0].split(',').map(h => h.trim());
-      const words = [];
-
-      // Đọc từng dòng từ vựng
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        // Regex tách dấu phẩy thông minh (bỏ qua dấu phẩy nằm trong ngoặc kép)
-        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-        const row = {};
-
-        headers.forEach((header, index) => {
-          let val = values[index] ? values[index].trim() : '';
-          // Bỏ dấu ngoặc kép bọc ngoài nếu có
-          if (val.startsWith('"') && val.endsWith('"')) {
-            val = val.slice(1, -1);
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PolyglotType - Luyện Gõ Phím Đa Ngôn Ngữ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['"JetBrains Mono"', 'monospace'],
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
           }
-          row[header] = val;
-        });
-
-        if (row.word) {
-          words.push(row);
         }
       }
-      return words;
     }
-
-    // Tải và chuyển đổi file CSV của ngôn ngữ được chọn
-    async function switchLanguage(langId) {
-      const langConfig = languagesList.find(l => l.id === langId);
-      if (!langConfig) return;
-
-      if (!loadedVocabCache[langId]) {
-        try {
-          const res = await fetch(langConfig.file);
-          if (!res.ok) throw new Error(`Không thể nạp ${langConfig.file}`);
-          const csvText = await res.text();
-          loadedVocabCache[langId] = parseCSV(csvText); // Parse CSV thành mảng dữ liệu
-        } catch (err) {
-          console.error(`Lỗi nạp file CSV [${langId}]:`, err);
-          alert(`Không tìm thấy file ${langConfig.file}!`);
-          return;
-        }
-      }
-
-      currentWords = loadedVocabCache[langId] || [];
-      currentLayout = langConfig.keyboardType || 'qwerty';
-      currentWordIndex = 0;
-      userInput = '';
-      totalTyped = 0;
-      correctTyped = 0;
-      startTime = null;
-
-      renderVirtualKeyboard(currentLayout);
-      displayCurrentWord();
+  </script>
+  <style>
+    /* Bàn phím tham khảo (Display-only), không bắt click chuột */
+    .keyboard-key {
+      pointer-events: none;
+      transition: background-color 0.08s ease, transform 0.08s ease, box-shadow 0.08s ease;
+      user-select: none;
     }
+    /* Đèn sáng tương ứng khi gõ phím vật lý trên máy tính */
+    .keyboard-key.physical-pressed {
+      transform: translateY(2px) scale(0.97);
+      background-color: #3b82f6 !important;
+      color: #ffffff !important;
+      border-color: #60a5fa !important;
+      box-shadow: 0 0 16px rgba(59, 130, 246, 0.7);
+    }
+    /* Gợi ý vị trí phím cần gõ tiếp theo */
+    .keyboard-key.target-hint {
+      outline: 2px solid #06b6d4;
+      outline-offset: 1px;
+      background-color: #083344 !important;
+      color: #67e8f9 !important;
+      border-color: #06b6d4 !important;
+      animation: pulse-guide 1.2s infinite alternate ease-in-out;
+    }
+    @keyframes pulse-guide {
+      0% { box-shadow: 0 0 4px #06b6d4; }
+      100% { box-shadow: 0 0 16px #06b6d4, inset 0 0 8px rgba(6, 182, 212, 0.4); }
+    }
+    .cursor-caret {
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-cyan-500 selection:text-black">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="2" y="4" width="20" height="16" rx="3" stroke-width="2"/>
+            <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-cyan-400 bg-clip-text text-transparent">PolyglotType</h1>
+          <p class="text-xs text-slate-400">Gõ trực tiếp bằng bàn phím máy tính • Mẫu layout trực quan</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- Nút Sound switch cơ -->
+        <button id="soundToggleBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 transition" title="Bật/Tắt âm switch cơ">
+          <span id="soundIcon">🔊</span>
+          <span id="soundText">Sound ON</span>
+        </button>
+
+        <!-- Dropdown ngôn ngữ (Nạp từ languages.json) -->
+        <div class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 shadow-inner">
+          <span class="text-xs text-slate-400">Ngôn ngữ:</span>
+          <select id="langSelect" class="bg-transparent text-sm font-semibold text-cyan-400 focus:outline-none cursor-pointer">
+            <option value="">Đang tải danh sách...</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Khu vực hiển thị trung tâm -->
+  <main class="flex-1 max-w-5xl mx-auto w-full px-4 py-6 flex flex-col justify-between gap-6">
+
+    <!-- Bảng chỉ số thống kê -->
+    <div class="grid grid-cols-4 gap-3 sm:gap-4">
+      <div class="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-3 sm:p-4 text-center shadow-lg">
+        <div class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">WPM</div>
+        <div id="wpmDisplay" class="text-2xl sm:text-3xl font-black font-mono text-cyan-400 mt-1">0</div>
+      </div>
+      <div class="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-3 sm:p-4 text-center shadow-lg">
+        <div class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">Chính xác</div>
+        <div id="accuracyDisplay" class="text-2xl sm:text-3xl font-black font-mono text-emerald-400 mt-1">100%</div>
+      </div>
+      <div class="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-3 sm:p-4 text-center shadow-lg">
+        <div class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">Tiến độ từ</div>
+        <div id="countDisplay" class="text-2xl sm:text-3xl font-black font-mono text-purple-400 mt-1">0/0</div>
+      </div>
+      <div class="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-3 sm:p-4 text-center shadow-lg">
+        <div class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">Bố cục mẫu</div>
+        <div id="layoutBadge" class="text-sm sm:text-base font-bold font-mono text-amber-400 mt-2 truncate">QWERTY</div>
+      </div>
+    </div>
+
+    <!-- Màn hình thẻ từ vựng & IPA -->
+    <div class="relative bg-gradient-to-b from-slate-900/90 to-slate-950 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col items-center justify-center text-center overflow-hidden min-h-[220px]">
+      <div class="absolute -top-24 w-80 h-32 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="flex items-center gap-2 mb-2">
+        <span id="wordType" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-950 text-cyan-400 border border-cyan-800/50">noun</span>
+        <span class="text-xs text-slate-400 flex items-center gap-1.5 font-mono">
+          <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          Đang lắng nghe bàn phím máy tính
+        </span>
+      </div>
+
+      <!-- Từ vựng gõ tương tác -->
+      <div id="wordDisplayContainer" class="font-mono text-4xl sm:text-5xl font-extrabold tracking-wide my-2 flex items-center justify-center flex-wrap select-none min-h-[64px]"></div>
+
+      <!-- Phiên âm IPA & Nghĩa -->
+      <div class="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 mt-2">
+        <div id="wordIpa" class="font-mono text-slate-400 text-base sm:text-lg tracking-normal font-medium bg-slate-800/50 px-3 py-1 rounded-xl">--</div>
+        <div id="wordMeaning" class="text-slate-200 text-base sm:text-lg font-medium">--</div>
+      </div>
+
+      <div class="mt-4 text-xs text-slate-400 flex items-center gap-1.5">
+        <span>Gõ trên bàn phím máy tính • Nhấn</span>
+        <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono">Space</kbd>
+        <span>hoặc</span>
+        <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono">Tab</kbd>
+        <span>để đổi từ</span>
+      </div>
+    </div>
+
+    <!-- Bàn phím ảo xem mẫu -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col items-center">
+      <div class="w-full flex items-center justify-between pb-3 mb-3 border-b border-slate-800 text-xs text-slate-400">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+          <span>Bản đồ bố cục phím mẫu (Hiển thị vị trí trực quan theo phím bạn bấm)</span>
+        </div>
+        <div class="font-mono">Chuẩn: <span id="currentLayoutName" class="text-cyan-400 font-bold">QWERTY</span></div>
+      </div>
+
+      <div id="virtualKeyboard" class="w-full max-w-4xl flex flex-col gap-1.5 sm:gap-2 select-none"></div>
+    </div>
+
+  </main>
+
+  <footer class="py-4 text-center text-xs text-slate-400 border-t border-slate-900">
+    Hệ thống luyện gõ bàn phím ngoại ngữ chuẩn xác.
+  </footer>
+
+  <script>
+    // --- Các biến trạng thái & Cache dữ liệu CSV ---
+    let languagesList = [];             // Danh sách cấu hình từ languages.json
+    let loadedVocabCache = {};          // Cache lưu từ vựng đã tải theo langId: { "en": [...], "de": [...] }
+    let currentWords = [];              // Danh sách từ vựng của ngôn ngữ đang chọn
+    let currentLayout = 'qwerty';
+    let currentWordIndex = 0;
+    let userInput = '';
+    let totalTyped = 0;
+    let correctTyped = 0;
+    let startTime = null;
+    let soundEnabled = true;
+
+    // --- Giả lập âm thanh Switch cơ bằng Web Audio API ---
+    let audioCtx = null;
+    function playKeySound(isError = false) {
+      if (!soundEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        if (isError) {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(140, now);
+          osc.frequency.exponentialRampToValueAtTime(70, now + 0.12);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.13);
+        } else {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(800, now);
+          osc.frequency.exponentialRampToValueAtTime(200, now + 0.04);
+          gain.gain.setValueAtTime(0.35, now);
+          gain.gain.exponentialRampToValueAtTime(0.005, now + 0.05);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.05
