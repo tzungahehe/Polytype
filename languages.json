@@ -1,0 +1,10 @@
+{
+  "languages": [
+    { "id": "en", "name": "English", "keyboardType": "qwerty", "file": "data/en.json" },
+    { "id": "de", "name": "Deutsch", "keyboardType": "qwertz", "file": "data/de.json" },
+    { "id": "fr", "name": "Français", "keyboardType": "azerty", "file": "data/fr.json" },
+    { "id": "es", "name": "Español", "keyboardType": "qwerty_es", "file": "data/es.json" },
+    { "id": "ru", "name": "Русский", "keyboardType": "jcuken", "file": "data/ru.json" },
+    { "id": "ja", "name": "日本語 (Romaji)", "keyboardType": "qwerty", "file": "data/ja.json" }
+  ]
+}
