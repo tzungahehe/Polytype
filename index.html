@@ -210,4 +210,356 @@
           osc.connect(gain);
           gain.connect(audioCtx.destination);
           osc.start(now);
-          osc.stop(now + 0.05
+          osc.stop(now + 0.05);
+        }
+      } catch (e) {}
+    }
+
+    // --- Định nghĩa layout mẫu bàn phím (Đã chuẩn hóa tiếng Đức theo layout DIN 2137-1) ---
+    const KEYBOARD_LAYOUTS = {
+      qwerty: [
+        ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+        ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
+        ['z', 'x', 'c', 'v', 'b', 'n', 'm'],
+        ['Space']
+      ],
+      qwertz: [
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'ß'],
+        ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', 'ü'],
+        ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'ö', 'ä'],
+        ['y', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.'],
+        ['Space']
+      ],
+      azerty: [
+        ['a', 'z', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+        ['q', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'm'],
+        ['w', 'x', 'c', 'v', 'b', 'n', 'é', 'è', 'ç', 'à'],
+        ['Space']
+      ],
+      qwerty_es: [
+        ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+        ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'ñ'],
+        ['z', 'x', 'c', 'v', 'b', 'n', 'm', 'á', 'é', 'í', 'ó', 'ú'],
+        ['Space']
+      ],
+      jcuken: [
+        ['й', 'ц', 'у', 'к', 'е', 'н', 'г', 'ш', 'щ', 'з', 'х', 'ъ'],
+        ['ф', 'ы', 'в', 'а', 'п', 'р', 'о', 'л', 'д', 'ж', 'э'],
+        ['я', 'ч', 'с', 'м', 'и', 'т', 'ь', 'б', 'ю'],
+        ['Space']
+      ]
+    };
+
+    // --- DOM Elements ---
+    const langSelect = document.getElementById('langSelect');
+    const wordDisplayContainer = document.getElementById('wordDisplayContainer');
+    const wordIpa = document.getElementById('wordIpa');
+    const wordMeaning = document.getElementById('wordMeaning');
+    const wordType = document.getElementById('wordType');
+    const virtualKeyboard = document.getElementById('virtualKeyboard');
+    const wpmDisplay = document.getElementById('wpmDisplay');
+    const accuracyDisplay = document.getElementById('accuracyDisplay');
+    const countDisplay = document.getElementById('countDisplay');
+    const layoutBadge = document.getElementById('layoutBadge');
+    const currentLayoutName = document.getElementById('currentLayoutName');
+    const soundToggleBtn = document.getElementById('soundToggleBtn');
+    const soundIcon = document.getElementById('soundIcon');
+    const soundText = document.getElementById('soundText');
+
+    soundToggleBtn.addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      soundIcon.textContent = soundEnabled ? '🔊' : '🔇';
+      soundText.textContent = soundEnabled ? 'Sound ON' : 'Sound OFF';
+      soundToggleBtn.classList.toggle('text-slate-400', !soundEnabled);
+      soundToggleBtn.classList.toggle('text-slate-300', soundEnabled);
+    });
+
+    // --- Render bàn phím hiển thị mẫu ---
+    function renderVirtualKeyboard(layoutKey) {
+      const rows = KEYBOARD_LAYOUTS[layoutKey] || KEYBOARD_LAYOUTS['qwerty'];
+      virtualKeyboard.innerHTML = '';
+      currentLayoutName.textContent = layoutKey.toUpperCase();
+      layoutBadge.textContent = layoutKey.toUpperCase();
+
+      rows.forEach(row => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'flex justify-center items-center gap-1 sm:gap-1.5 w-full';
+
+        row.forEach(keyChar => {
+          const keyDiv = document.createElement('div');
+          keyDiv.setAttribute('data-key', keyChar.toLowerCase());
+
+          if (keyChar === 'Space') {
+            keyDiv.className = 'keyboard-key h-10 sm:h-12 w-64 sm:w-80 bg-slate-800/90 border border-slate-700/80 rounded-lg text-slate-400 font-mono text-xs flex items-center justify-center shadow-md';
+            keyDiv.textContent = 'Space';
+          } else {
+            keyDiv.className = 'keyboard-key h-10 sm:h-12 flex-1 max-w-[54px] bg-slate-800/90 border border-slate-700/80 rounded-lg text-slate-300 font-mono text-sm sm:text-base font-bold flex items-center justify-center shadow-md';
+            keyDiv.textContent = keyChar;
+          }
+
+          rowDiv.appendChild(keyDiv);
+        });
+
+        virtualKeyboard.appendChild(rowDiv);
+      });
+    }
+
+    // --- Gợi ý phím kế tiếp trên bàn phím mẫu ---
+    function updateKeyHighlights() {
+      document.querySelectorAll('.keyboard-key.target-hint').forEach(el => {
+        el.classList.remove('target-hint');
+      });
+
+      const currentWordObj = currentWords[currentWordIndex];
+      if (!currentWordObj) return;
+
+      const targetWord = currentWordObj.word;
+      if (userInput.length < targetWord.length) {
+        const nextChar = targetWord[userInput.length].toLowerCase();
+        const targetElement = document.querySelector(`.keyboard-key[data-key="${nextChar}"]`);
+        if (targetElement) {
+          targetElement.classList.add('target-hint');
+        }
+      }
+    }
+
+    // --- Sáng đèn khi người dùng ấn phím vật lý trên máy tính ---
+    function highlightPhysicalKeyPress(key) {
+      const el = document.querySelector(`.keyboard-key[data-key="${key.toLowerCase()}"]`);
+      if (el) {
+        el.classList.add('physical-pressed');
+        setTimeout(() => el.classList.remove('physical-pressed'), 120);
+      }
+    }
+
+    function updateMetrics() {
+      if (!startTime && totalTyped > 0) startTime = new Date();
+      if (startTime) {
+        const elapsedMins = (new Date() - startTime) / 60000;
+        if (elapsedMins > 0.05) {
+          const wpm = Math.round((correctTyped / 5) / elapsedMins);
+          wpmDisplay.textContent = Math.max(0, wpm);
+        }
+      }
+      const acc = totalTyped === 0 ? 100 : Math.round((correctTyped / totalTyped) * 100);
+      accuracyDisplay.textContent = acc + '%';
+
+      countDisplay.textContent = `${currentWordIndex + 1}/${currentWords.length}`;
+    }
+
+    function displayCurrentWord() {
+      const currentWordObj = currentWords[currentWordIndex];
+      if (!currentWordObj) {
+        wordDisplayContainer.innerHTML = '<span class="text-slate-500 text-xl font-normal">Chưa có từ vựng</span>';
+        wordIpa.textContent = '--';
+        wordMeaning.textContent = '--';
+        wordType.textContent = '--';
+        return;
+      }
+
+      const targetWord = currentWordObj.word;
+      wordIpa.textContent = currentWordObj.ipa || '';
+      wordMeaning.textContent = currentWordObj.meaning || '';
+      wordType.textContent = currentWordObj.type || 'từ vựng';
+
+      wordDisplayContainer.innerHTML = '';
+
+      for (let i = 0; i < targetWord.length; i++) {
+        const charSpan = document.createElement('span');
+        const targetChar = targetWord[i];
+        charSpan.textContent = targetChar;
+        charSpan.className = 'relative px-0.5 inline-block';
+
+        if (i < userInput.length) {
+          if (userInput[i].toLowerCase() === targetChar.toLowerCase()) {
+            charSpan.classList.add('text-emerald-400');
+          } else {
+            charSpan.classList.add('text-rose-500', 'underline', 'decoration-rose-500', 'decoration-4');
+          }
+        } else if (i === userInput.length) {
+          charSpan.classList.add('text-cyan-300');
+          const cursor = document.createElement('span');
+          cursor.className = 'cursor-caret absolute -bottom-1 left-0 right-0 h-1 bg-cyan-400 rounded-full';
+          charSpan.appendChild(cursor);
+        } else {
+          charSpan.classList.add('text-slate-500');
+        }
+        wordDisplayContainer.appendChild(charSpan);
+      }
+
+      updateKeyHighlights();
+      updateMetrics();
+    }
+
+    function nextWord() {
+      userInput = '';
+      if (currentWords.length > 0) {
+        currentWordIndex = (currentWordIndex + 1) % currentWords.length;
+      }
+      displayCurrentWord();
+    }
+
+    // --- Nhận phím trực tiếp từ bàn phím máy tính ---
+    window.addEventListener('keydown', (e) => {
+      if (document.activeElement === langSelect) return;
+
+      // Phím Tab hoặc Space để chuyển từ
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        playKeySound(false);
+        nextWord();
+        return;
+      }
+
+      if (e.key === ' ') {
+        e.preventDefault();
+        highlightPhysicalKeyPress('space');
+        playKeySound(false);
+        nextWord();
+        return;
+      }
+
+      // Phím Backspace để xóa ký tự
+      if (e.key === 'Backspace') {
+        if (userInput.length > 0) {
+          userInput = userInput.slice(0, -1);
+          playKeySound(false);
+          displayCurrentWord();
+        }
+        return;
+      }
+
+      // Chỉ nhận ký tự gõ hiển thị (độ dài 1 ký tự, hỗ trợ đầy đủ ký tự unicode/quốc tế)
+      if (e.key.length !== 1) {
+        return;
+      }
+
+      const inputChar = e.key;
+      highlightPhysicalKeyPress(inputChar);
+
+      const currentWordObj = currentWords[currentWordIndex];
+      if (!currentWordObj) return;
+
+      const targetWord = currentWordObj.word;
+      const expectedChar = targetWord[userInput.length];
+      totalTyped++;
+
+      if (expectedChar && inputChar.toLowerCase() === expectedChar.toLowerCase()) {
+        correctTyped++;
+        userInput += inputChar;
+        playKeySound(false);
+      } else {
+        userInput += inputChar;
+        playKeySound(true);
+      }
+
+      displayCurrentWord();
+
+      if (userInput.toLowerCase() === targetWord.toLowerCase()) {
+        setTimeout(() => nextWord(), 180);
+      }
+    });
+
+    // --- Hàm giải mã chuỗi CSV sang Array of Objects ---
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length <= 1) return [];
+
+      const headers = lines[0].split(',').map(h => h.trim());
+      const words = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Tách các cột phân cách bởi dấu phẩy, hỗ trợ cụm trong ngoặc kép
+        const regex = /(?:\"([^\"]*(?:\"\"[^\"]*)*)\"|([^,]+)|(?=,))/g;
+        const values = [];
+        let match;
+        while ((match = regex.exec(line)) !== null) {
+          if (match[1] !== undefined) {
+            values.push(match[1].replace(/\"\"/g, '\"').trim());
+          } else if (match[2] !== undefined) {
+            values.push(match[2].trim());
+          } else {
+            values.push('');
+          }
+        }
+
+        const row = {};
+        headers.forEach((h, idx) => {
+          row[h] = values[idx] || '';
+        });
+
+        if (row.word) {
+          words.push(row);
+        }
+      }
+      return words;
+    }
+
+    // --- Tải file CSV riêng của ngôn ngữ (Lazy load + Cache) ---
+    async function switchLanguage(langId) {
+      const langConfig = languagesList.find(l => l.id === langId);
+      if (!langConfig) return;
+
+      if (!loadedVocabCache[langId]) {
+        try {
+          const res = await fetch(langConfig.file);
+          if (!res.ok) throw new Error(`Không thể nạp file ${langConfig.file}`);
+          const text = await res.text();
+          loadedVocabCache[langId] = parseCSV(text);
+        } catch (err) {
+          console.error(`Lỗi nạp từ điển [${langId}]:`, err);
+          alert(`Không tìm thấy file ${langConfig.file}! Hãy kiểm tra đường dẫn.`);
+          return;
+        }
+      }
+
+      currentWords = loadedVocabCache[langId] || [];
+      currentLayout = langConfig.keyboardType || 'qwerty';
+      currentWordIndex = 0;
+      userInput = '';
+      totalTyped = 0;
+      correctTyped = 0;
+      startTime = null;
+
+      renderVirtualKeyboard(currentLayout);
+      displayCurrentWord();
+    }
+
+    langSelect.addEventListener('change', (e) => {
+      switchLanguage(e.target.value);
+      langSelect.blur();
+    });
+
+    // --- Khởi tạo: Đọc languages.json và render dropdown ---
+    async function init() {
+      try {
+        const res = await fetch('languages.json');
+        if (!res.ok) throw new Error('Không thể tải languages.json');
+        const data = await res.json();
+        languagesList = data.languages || [];
+      } catch (err) {
+        console.error('Lỗi khi nạp danh sách ngôn ngữ:', err);
+        return;
+      }
+
+      langSelect.innerHTML = '';
+      languagesList.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.className = 'bg-slate-900 text-white';
+        opt.textContent = `${item.name} (${item.keyboardType.toUpperCase()})`;
+        langSelect.appendChild(opt);
+      });
+
+      if (languagesList.length > 0) {
+        switchLanguage(languagesList[0].id);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
