@@ -1,24 +1,24 @@
-word,ipa,meaning
-familia,/faˈmi.lja/,gia đình
-padres,/ˈpa.ðɾes/,bố mẹ / cha mẹ
-papá,/paˈpa/,bố / cha / papa
-padre,/ˈpa.ðɾe/,bố / cha
-madre,/ˈma.ðɾe/,mẹ
-mamá,/maˈma/,mẹ / má
-esposo,/esˈpo.so/,chồng
-marido,/maˈɾi.ðo/,chồng
-esposa,/esˈpo.sa/,vợ
-mujer,/muˈxeɾ/,vợ
-hijo,/ˈi.xo/,con trai
-hija,/ˈi.xa/,con gái
-niño,/ˈni.ɲo/,đứa trẻ (nam) / con
-hijos,/ˈi.xos/,con cái / những đứa con
-hermano,/eɾˈma.no/,anh trai / em trai
-hermana,/eɾˈma.na/,chị gái / em gái
-abuelo,/aˈβwe.lo/,ông
-abuela,/aˈβwe.la/,bà
-nieto,/ˈnje.to/,cháu trai
-nieta,/ˈnje.ta/,cháu gái
-tío,/ˈti.o/,chú / bác trai / cậu
-tía,/ˈti.a/,cô / dì / bác gái
-primo,/ˈpɾi.mo/,anh em họ (nam)
+word,ipa,meaning,type
+familia,/faˈmi.lja/,gia đình,f.
+padres,/ˈpa.ðɾes/,bố mẹ / cha mẹ,m. pl.
+papá,/paˈpa/,bố / cha / papa,m.
+padre,/ˈpa.ðɾe/,bố / cha,m.
+madre,/ˈma.ðɾe/,mẹ,f.
+mamá,/maˈma/,mẹ / má,f.
+esposo,/esˈpo.so/,chồng,m.
+marido,/maˈɾi.ðo/,chồng,m.
+esposa,/esˈpo.sa/,vợ,f.
+mujer,/muˈxeɾ/,vợ,f.
+hijo,/ˈi.xo/,con trai,m.
+hija,/ˈi.xa/,con gái,f.
+niño,/ˈni.ɲo/,đứa trẻ (nam) / con,m.
+hijos,/ˈi.xos/,con cái / những đứa con,m. pl.
+hermano,/eɾˈma.no/,anh trai / em trai,m.
+hermana,/eɾˈma.na/,chị gái / em gái,f.
+abuelo,/aˈβwe.lo/,ông,m.
+abuela,/aˈβwe.la/,bà,f.
+nieto,/ˈnje.to/,cháu trai,m.
+nieta,/ˈnje.ta/,cháu gái,f.
+tío,/ˈti.o/,chú / bác trai / cậu,m.
+tía,/ˈti.a/,cô / dì / bác gái,f.
+primo,/ˈpɾi.mo/,anh em họ (nam),m.
